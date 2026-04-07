@@ -1,11 +1,27 @@
 #include "gpio.h"
 
+static const char* TAG = "GPIO MODULE"; // Tag for print statements
+
+static int64_t last_pir_isr_time = 0;
+
 void IRAM_ATTR pir_isr(void* arg) {
-    
+    int64_t now = esp_timer_get_time();
+    if (now - last_pir_isr_time > DEBOUNCE_DELAY_US) {
+        last_pir_isr_time = now;
+
+        ESP_LOGI(TAG, "PIR Activated");
+    }
 }
 
+static int64_t last_btn_isr_time = 0;
+
 void IRAM_ATTR btn_isr(void* arg) {
-    
+    int64_t now = esp_timer_get_time();
+    if (now - last_btn_isr_time > DEBOUNCE_DELAY_US) {
+        last_btn_isr_time = now;
+
+        ESP_LOGI(TAG, "Button Pressed");
+    }
 }
 
 
@@ -54,6 +70,6 @@ void gpio_init_all() {
         .hpoint = 0, // phase = 0
     };
     ledc_channel_config(&ledc_channel);
-
-
 }
+
+// define servo task

@@ -6,5 +6,7 @@ void app_main(void) {
     //sd_init();
     gpio_init_all(); // PIR, light-dependent-resistor, IR array, wifi button, servos
 
-
+    while(1) {
+        
+    }
 }
