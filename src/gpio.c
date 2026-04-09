@@ -4,13 +4,15 @@
 static const char* TAG = "GPIO MODULE"; // Tag for print statements
 static adc_oneshot_unit_handle_t adc_handle;  // 'static' limits scope to this file
 static int64_t last_pir_isr_time = 0;
+QueueHandle_t gpio_evt_queue;
 
 void IRAM_ATTR pir_isr(void* arg) {
     int64_t now = esp_timer_get_time();
     if (now - last_pir_isr_time > DEBOUNCE_DELAY_US) {
         last_pir_isr_time = now;
-
-        ESP_LOGI(TAG, "PIR Activated");
+        int pin = PIR_PIN;
+        // Notify task that does the work
+        xQueueSendFromISR(gpio_evt_queue, &pin, NULL);
     }
 }
 
@@ -20,12 +22,14 @@ void IRAM_ATTR btn_isr(void* arg) {
     int64_t now = esp_timer_get_time();
     if (now - last_btn_isr_time > DEBOUNCE_DELAY_US) {
         last_btn_isr_time = now;
-
-        ESP_LOGI(TAG, "Button Pressed");
+        int pin = BUTTON_PIN;
+        xQueueSendFromISR(gpio_evt_queue, &pin, NULL);
     }
 }
 
 void gpio_init_all() {
+    // init queue for ISR communication
+    gpio_evt_queue = xQueueCreate(10, sizeof(int));
 
     // PIR Pin init
     gpio_config_t pir = {
@@ -79,7 +83,7 @@ void gpio_init_all() {
 
     adc_oneshot_chan_cfg_t chan_cfg = {
         .atten = ADC_ATTEN_DB_12, // attenuation to support 0 - 3.1V
-        .bitwidth = ADC_BITWIDTH_DEFAULT // 13 bit output
+        .bitwidth = ADC_BITWIDTH_12 // 12 bit output
     };
     adc_oneshot_config_channel(adc_handle, LDR_ADC_CH, &chan_cfg); // set pin to LDR_ADC_CH
 }

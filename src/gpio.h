@@ -15,7 +15,10 @@
 #define LDR_ADC_CH ADC_CHANNEL_0 // pin 0 for LDR
 
 // define constants
-#define DEBOUNCE_DELAY_US 20000  // 20 ms
+#define DEBOUNCE_DELAY_US 200000  // 200 ms
+
+// define handles
+extern QueueHandle_t gpio_evt_queue;
 
 // function prototypes
 void gpio_init_all(void);
