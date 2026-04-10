@@ -1,6 +1,7 @@
 #include "gpio.h"
+#include "camera.h"
 
-static const char* TAG = "MAIN MODULE"; // Tag for print statements
+static const char* TAG = "MAIN"; // Tag for print statements
 
 void app_main(void) {
 
@@ -8,10 +9,12 @@ void app_main(void) {
     // Delay 5 seconds to let PIR stabilize
     vTaskDelay(pdMS_TO_TICKS(5000));
 
-    //camera_init();
+    camera_init();
     //sd_init();
     gpio_init_all(); // PIR, light-dependent-resistor, IR array, wifi button, servos
 
+    //xTaskCreatePinnedToCore();
+    /**
     while(1) {
         int pin;
         // queue receives pin number from ISR that activated
@@ -23,5 +26,5 @@ void app_main(void) {
 
         ESP_LOGI(TAG, "%d", ldr_read());
         vTaskDelay(pdMS_TO_TICKS(1000));
-    }
+    }*/
 }

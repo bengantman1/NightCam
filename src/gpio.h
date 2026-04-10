@@ -12,7 +12,7 @@
 #define PIR_PIN GPIO_NUM_4
 #define BUTTON_PIN GPIO_NUM_5
 #define IR_ARRAY_PIN GPIO_NUM_6
-#define LDR_ADC_CH ADC_CHANNEL_0 // pin 0 for LDR
+#define LDR_ADC_CH ADC_CHANNEL_1 // pin 1 for LDR
 
 // define constants
 #define DEBOUNCE_DELAY_US 200000  // 200 ms
@@ -24,4 +24,10 @@ extern QueueHandle_t gpio_evt_queue;
 void gpio_init_all(void);
 void pir_isr(void* arg); 
 void btn_isr(void* arg);
+
+/**
+ * Values range from 1300-4095
+ *  <= 2400 --> bright
+ * > 2700 --> dark7
+ */
 int ldr_read(void);

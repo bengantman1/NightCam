@@ -1,7 +1,7 @@
 #include "gpio.h"
 
 // globals
-static const char* TAG = "GPIO MODULE"; // Tag for print statements
+static const char* TAG = "GPIO"; // Tag for print statements
 static adc_oneshot_unit_handle_t adc_handle;  // 'static' limits scope to this file
 static int64_t last_pir_isr_time = 0;
 QueueHandle_t gpio_evt_queue;
