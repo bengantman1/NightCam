@@ -1,13 +1,21 @@
 #include "gpio.h"
 #include "camera.h"
+#include "esp_sleep.h"
 
 static const char* TAG = "MAIN"; // Tag for print statements
+
+typedef enum { LIGHT_DAY, LIGHT_DUSK, LIGHT_NIGHT } light_level_t;
 
 void app_main(void) {
 
     // Initialize Peripherals
     // Delay 5 seconds to let PIR stabilize
     vTaskDelay(pdMS_TO_TICKS(5000));
+
+    const char* wakeup_reason;
+    uint32_t wakup_causes = esp_sleep_get_wakeup_causes();
+    // based on wake up cause (button, PIR, first boot), turn on WIFI mode or capture mode
+
 
     camera_init();
     //sd_init();
