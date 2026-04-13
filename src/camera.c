@@ -47,7 +47,7 @@ esp_err_t camera_init() {
         ESP_LOGE(TAG, "Camera init failed: 0x%x", err);
         return err;
     }
-
+//vary some of these dependent on Light sensor reading
     sensor_t *s = esp_camera_sensor_get();
     if (s){
         s->set_framesize(s,     FRAMESIZE_QVGA);
