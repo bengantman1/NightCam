@@ -56,7 +56,7 @@ esp_err_t camera_init() {
         s->set_whitebal(s,      0);              // No AWB needed for IR
         s->set_exposure_ctrl(s, 0);              // Fixed exposure for IR lighting
         s->set_aec_value(s,     400);            // Tune for your IR LED strength (0-1200)
-        s->set_gain_ctrl(s,     1);              // Auto gain on
+        s->set_gain_ctrl(s,     1);              // Auto gain on (do we want this off for better speed/less computation?)
         s->set_gainceiling(s,   GAINCEILING_8X); // High gain for night vision
     }
 
