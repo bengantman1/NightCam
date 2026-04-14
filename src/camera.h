@@ -1,6 +1,13 @@
+#pragma once
 #include "esp_camera.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
+#include "sdmmc_cmd.h"
+#include "driver/sdspi_host.h"
+#include "driver/spi_common.h"
+#include "esp_vfs_fat.h"
+#include "errno.h"
+#include "sys/stat.h"
 
 // ========= CAMERA PINS (XIAO ESP32S3 Sense) =========
 #define PWDN_GPIO_NUM     -1
@@ -20,9 +27,15 @@
 #define HREF_GPIO_NUM     47
 #define PCLK_GPIO_NUM     13
 
+// ========= SD CARD PINS (XIAO ESP32S3 Sense) =========
+#define SD_MOSI     GPIO_NUM_9
+#define SD_MISO     GPIO_NUM_8
+#define SD_CLK      GPIO_NUM_7
+#define SD_CS       GPIO_NUM_21
+
 // recording config
-#define RECORD_DURATION_MS  5000
-#define FRAME_INTERVAL_MS   30
+#define RECORD_DURATION_MS  10000
+#define FRAME_INTERVAL_MS   66 // about 15 fps
 #define MOUNT_POINT         "/sdcard"
 
 #define MAX_FRAMES      150
@@ -30,5 +43,11 @@
 
 // function declarations
 esp_err_t camera_init(void);
+esp_err_t sd_init(void);
+
+/**
+ * Records to fixed size PSRAM allocation, then writes to SD card
+ * Simultaneously sends frame pointers to tracking task
+ */
 void record_task(void *pv);
 bool psram_alloc_frames();

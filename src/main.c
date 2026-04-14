@@ -18,7 +18,7 @@ void app_main(void) {
 
 
     camera_init();
-    //sd_init();
+    sd_init();
     gpio_init_all(); // PIR, light-dependent-resistor, IR array, wifi button, servos
 
     xTaskCreatePinnedToCore(record_task, "Record_Task", 4096, NULL, 2, NULL, 1); // higher number is higher priority
