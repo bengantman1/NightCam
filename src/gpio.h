@@ -7,6 +7,7 @@
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "esp_adc/adc_oneshot.h"
+#include "global_events.h"
 
 // define pins
 #define PIR_PIN GPIO_NUM_4
@@ -16,9 +17,6 @@
 
 // define constants
 #define DEBOUNCE_DELAY_US 200000  // 200 ms
-
-// define handles
-extern QueueHandle_t gpio_evt_queue;
 
 // function prototypes
 void gpio_init_all(void);
@@ -30,4 +28,4 @@ void btn_isr(void* arg);
  *  <= 2400 --> bright
  * > 2700 --> dark7
  */
-int ldr_read(void);
+void ldr_read_task(void *pv);

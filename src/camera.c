@@ -1,4 +1,5 @@
 #include "camera.h"
+#include "global_events.h"
 
 static const char* TAG = "CAMERA"; // Tag for print statements
 
@@ -101,6 +102,11 @@ void record_task(void *pv) {
     }
 
     while(1) {
+        // Wait here until IR ARRAY is activated
+        xEventGroupWaitBits(event_group, ENVIRONMENT_READY, pdTRUE, pdTRUE, portMAX_DELAY);
+        // set camera as active so PIR cannot interrupt
+        xEventGroupSetBits(event_group, CAMERA_ACTIVE);
+        
         int captured = 0;
         TickType_t end = xTaskGetTickCount() + pdMS_TO_TICKS(RECORD_DURATION_MS);
 
@@ -133,7 +139,9 @@ void record_task(void *pv) {
             ESP_LOGW(TAG, "No frames captured - skipping");
             continue;
         }
-        
+
+        // Mark camera as inactive
+        xEventGroupClearBits(event_group, CAMERA_ACTIVE);
     }
 
 }

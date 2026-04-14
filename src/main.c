@@ -13,7 +13,7 @@ void app_main(void) {
     vTaskDelay(pdMS_TO_TICKS(5000));
 
     const char* wakeup_reason;
-    uint32_t wakup_causes = esp_sleep_get_wakeup_causes();
+    uint32_t wakeup_causes = esp_sleep_get_wakeup_causes();
     // based on wake up cause (button, PIR, first boot), turn on WIFI mode or capture mode
 
 
@@ -21,7 +21,8 @@ void app_main(void) {
     //sd_init();
     gpio_init_all(); // PIR, light-dependent-resistor, IR array, wifi button, servos
 
-    //xTaskCreatePinnedToCore();
+    xTaskCreatePinnedToCore(record_task, "Record_Task", 4096, NULL, 2, NULL, 1); // higher number is higher priority
+    xTaskCreatePinnedToCore(ldr_read_task, "LDR_Read", 4096, NULL, 1, NULL, 1);
     /**
     while(1) {
         int pin;

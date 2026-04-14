@@ -1,9 +1,6 @@
 #include "esp_camera.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-//#include "sys/stat.h"
-
 
 // ========= CAMERA PINS (XIAO ESP32S3 Sense) =========
 #define PWDN_GPIO_NUM     -1

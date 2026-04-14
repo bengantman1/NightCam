@@ -4,15 +4,20 @@
 static const char* TAG = "GPIO"; // Tag for print statements
 static adc_oneshot_unit_handle_t adc_handle;  // 'static' limits scope to this file
 static int64_t last_pir_isr_time = 0;
-QueueHandle_t gpio_evt_queue;
+EventGroupHandle_t event_group;
 
 void IRAM_ATTR pir_isr(void* arg) {
-    int64_t now = esp_timer_get_time();
-    if (now - last_pir_isr_time > DEBOUNCE_DELAY_US) {
-        last_pir_isr_time = now;
-        int pin = PIR_PIN;
-        // Notify task that does the work
-        xQueueSendFromISR(gpio_evt_queue, &pin, NULL);
+    EventBits_t state = xEventGroupGetBitsFromISR(event_group);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    // only run if no other important tasks are running
+    if (!(state & (PIR_ACTIVATED | ENVIRONMENT_READY | CAMERA_ACTIVE | WIFI_ACTIVE))) {
+        int64_t now = esp_timer_get_time();
+        if (now - last_pir_isr_time > DEBOUNCE_DELAY_US) {
+            last_pir_isr_time = now;
+            // Notify task that does the work
+            xEventGroupSetBitsFromISR(event_group, PIR_ACTIVATED, &xHigherPriorityTaskWoken);
+        }
     }
 }
 
@@ -22,14 +27,12 @@ void IRAM_ATTR btn_isr(void* arg) {
     int64_t now = esp_timer_get_time();
     if (now - last_btn_isr_time > DEBOUNCE_DELAY_US) {
         last_btn_isr_time = now;
-        int pin = BUTTON_PIN;
-        xQueueSendFromISR(gpio_evt_queue, &pin, NULL);
     }
 }
 
 void gpio_init_all() {
-    // init queue for ISR communication
-    gpio_evt_queue = xQueueCreate(10, sizeof(int));
+
+    event_group = xEventGroupCreate(); // 24 event bits
 
     // PIR Pin init
     gpio_config_t pir = {
@@ -52,8 +55,15 @@ void gpio_init_all() {
     gpio_config(&btn);
     gpio_isr_handler_add(BUTTON_PIN, btn_isr, NULL);
 
-    // IR array PWM init
+    // IR array init
+    gpio_config_t irarray = {
+        .pin_bit_mask = (1ULL << IR_ARRAY_PIN),
+        .mode = GPIO_MODE_OUTPUT,
+    };
+    gpio_config(&irarray);
+    gpio_set_level(IR_ARRAY_PIN, 0);
     
+    /**
     // config led timer
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_LOW_SPEED_MODE,
@@ -73,7 +83,7 @@ void gpio_init_all() {
         .duty = 512, // 50% duty cycle for 10 bit pwm timer
         .hpoint = 0, // phase = 0
     };
-    ledc_channel_config(&ledc_channel);
+    ledc_channel_config(&ledc_channel); */
 
     // config light dependent resistor ADC
     adc_oneshot_unit_init_cfg_t init_cfg = {
@@ -88,10 +98,22 @@ void gpio_init_all() {
     adc_oneshot_config_channel(adc_handle, LDR_ADC_CH, &chan_cfg); // set pin to LDR_ADC_CH
 }
 
-int ldr_read(void) {
-    int raw; 
-    adc_oneshot_read(adc_handle, LDR_ADC_CH, &raw);
-    return raw;
+void ldr_read_task(void *pv) {
+    int raw;
+    while(1) {
+        // wait for PIR_ACTIVATED and clear bit on exit
+        xEventGroupWaitBits(event_group, PIR_ACTIVATED, pdTRUE, pdTRUE, portMAX_DELAY);
+        adc_oneshot_read(adc_handle, LDR_ADC_CH, &raw);
+
+        if (raw > 900) {
+            gpio_set_level(IR_ARRAY_PIN, 1);
+            ESP_LOGI(TAG, "Raw ADC Value: %d, IR array ON", raw);
+        } else {
+            gpio_set_level(IR_ARRAY_PIN, 0);
+            ESP_LOGI(TAG, "Raw ADC Value: %d, IR array OFF", raw);
+        }
+        xEventGroupSetBits(event_group, ENVIRONMENT_READY);
+    }
 }
 
 // define servo task
