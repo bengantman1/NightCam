@@ -8,6 +8,7 @@
 #include "esp_vfs_fat.h"
 #include "errno.h"
 #include "sys/stat.h"
+#include "global_events.h"
 
 // ========= CAMERA PINS (XIAO ESP32S3 Sense) =========
 #define PWDN_GPIO_NUM     -1

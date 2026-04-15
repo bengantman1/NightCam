@@ -1,6 +1,7 @@
 #include "gpio.h"
 #include "camera.h"
 #include "esp_sleep.h"
+#include "servo.h"
 
 static const char* TAG = "MAIN"; // Tag for print statements
 
@@ -19,6 +20,7 @@ void app_main(void) {
 
     camera_init();
     sd_init();
+    //servo_init();
     gpio_init_all(); // PIR, light-dependent-resistor, IR array, wifi button, servos
 
     xTaskCreatePinnedToCore(record_task, "Record_Task", 4096, NULL, 2, NULL, 1); // higher number is higher priority

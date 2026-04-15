@@ -1,16 +1,12 @@
 #include "camera.h"
-#include "global_events.h"
 
 static const char* TAG = "CAMERA"; // Tag for print statements
-
-typedef struct {
-    uint8_t *data; // pointer to pixel array
-    size_t   len; // num of bytes in the array
-} frame_buf_t;
 
 static frame_buf_t frames[MAX_FRAMES];
 static bool        psram_ready = false;
 static sdmmc_card_t *sd_card = NULL;
+
+QueueHandle_t frame_queue;
 
 esp_err_t sd_init(void) {
     esp_vfs_fat_sdmmc_mount_config_t mount_cfg = {
@@ -110,6 +106,8 @@ esp_err_t camera_init() {
         return err;
     }
 
+    frame_queue = xQueueCreate(10, sizeof(frame_buf_t));
+
     return ESP_OK;
 }
 
@@ -176,6 +174,8 @@ void record_task(void *pv) {
             // copy frame buffer data to frames array
             memcpy(frames[captured].data, frame_buffer->buf, copy_len);
             frames[captured].len = copy_len;
+            // send frame pointers to tracking process for servo updates
+            xQueueSend(frame_queue, &frames[captured], 0);
             captured++;
 
             esp_camera_fb_return(frame_buffer);

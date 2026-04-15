@@ -4,13 +4,20 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 
-// Declaration: Makes the handle visible to any file that includes this header
+// Make the handles visible to any file that includes this header
 extern EventGroupHandle_t event_group;
+extern QueueHandle_t frame_queue;
 
-// Define your bit constants here so they are consistent across files
+// Define event bits
 #define PIR_ACTIVATED      BIT0
 #define ENVIRONMENT_READY  BIT1
 #define CAMERA_ACTIVE      BIT2
 #define WIFI_ACTIVE        BIT3
+
+// define global types
+typedef struct {
+    uint8_t *data; // pointer to pixel array
+    size_t   len; // num of bytes in the array
+} frame_buf_t;
 
 #endif
