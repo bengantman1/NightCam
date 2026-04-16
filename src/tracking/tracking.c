@@ -119,7 +119,7 @@ void tracker_task(void *pv) {
     // ---- Seed the previous frame ----
     if (xQueueReceive(frame_queue, &fb, portMAX_DELAY)) {
         gray_ctx_t ctx = { gray_prev, 0, FRAME_SIZE };
-        esp_jpeg_decode(fb->buf, fb->len, JPG_SCALE_4X, _gray_out_cb, &ctx);
+        //esp_jpeg_decode(fb->buf, fb->len, JPG_SCALE_4X, _gray_out_cb, &ctx);
         esp_camera_fb_return(fb);
     }
 
@@ -141,8 +141,7 @@ void tracker_task(void *pv) {
 
         // ---- Decode at 1/4 resolution for speed ----
         gray_ctx_t ctx = { gray_curr, 0, FRAME_SIZE };
-        esp_jpg_decode(latest->buf, latest->len, JPG_SCALE_4X,
-                       _gray_out_cb, &ctx);
+        //esp_jpg_decode(latest->buf, latest->len, JPG_SCALE_4X, _gray_out_cb, &ctx);
         esp_camera_fb_return(latest);
 
         // ---- Motion detection ----
