@@ -13,6 +13,7 @@ extern QueueHandle_t frame_queue;
 #define ENVIRONMENT_READY  BIT1
 #define CAMERA_ACTIVE      BIT2
 #define WIFI_ACTIVE        BIT3
+#define RECORDING_DONE     BIT4
 
 // define global types
 typedef struct {

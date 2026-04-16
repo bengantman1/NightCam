@@ -234,6 +234,7 @@ void record_task(void *pv) {
 
         // Mark camera task as inactive
         xEventGroupClearBits(event_group, CAMERA_ACTIVE);
+        xEventGroupSetBits(event_group, RECORDING_DONE);
     }
 
 }

@@ -3,8 +3,8 @@ typedef struct {
     float integral;
     float prev_error;
     float output_min, output_max;
-} pid_t;
+} PID_t;
 
-void  pid_init(pid_t *pid, float kp, float ki, float kd,
+void  pid_init(PID_t *pid, float kp, float ki, float kd,
                float out_min, float out_max);
-float pid_update(pid_t *pid, float error, float dt);
+float pid_update(PID_t *pid, float error, float dt);

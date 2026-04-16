@@ -24,9 +24,15 @@ void IRAM_ATTR pir_isr(void* arg) {
 static int64_t last_btn_isr_time = 0;
 
 void IRAM_ATTR btn_isr(void* arg) {
-    int64_t now = esp_timer_get_time();
-    if (now - last_btn_isr_time > DEBOUNCE_DELAY_US) {
-        last_btn_isr_time = now;
+    EventBits_t state = xEventGroupGetBitsFromISR(event_group);
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if (!(state & (PIR_ACTIVATED | ENVIRONMENT_READY | CAMERA_ACTIVE | WIFI_ACTIVE))) {
+        int64_t now = esp_timer_get_time();
+        if (now - last_btn_isr_time > DEBOUNCE_DELAY_US) {
+            last_btn_isr_time = now;
+
+            xEventGroupSetBitsFromISR(event_group, WIFI_ACTIVE, &xHigherPriorityTaskWoken);
+        }
     }
 }
 

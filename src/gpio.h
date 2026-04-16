@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_adc/adc_oneshot.h"
 #include "global_events.h"
+#include "esp_sleep.h"
 
 // define pins
 #define PIR_PIN GPIO_NUM_4
