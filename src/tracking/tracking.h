@@ -54,8 +54,6 @@ typedef struct {
     bool has_lock;
 } tracker_state_t;
 
-extern bool _gray_out_cb(void *arg, uint8_t *data, int len);
-
 void tracker_init(void);
 void tracker_task(void *pv);
 

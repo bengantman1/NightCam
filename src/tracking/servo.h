@@ -7,8 +7,8 @@
 #define SERVO_MAX_US     2000  // full right / full up
 #define LEDC_MAX_DUTY    16383
 
-#define SERVO_PAN_PIN GPIO_NUM_0
-#define SERVO_TILT_PIN GPIO_NUM_10
+#define SERVO_PAN_PIN GPIO_NUM_1
+#define SERVO_TILT_PIN GPIO_NUM_44
 
 #define PAN_TIMER    LEDC_TIMER_0
 #define PAN_CHANNEL  LEDC_CHANNEL_0

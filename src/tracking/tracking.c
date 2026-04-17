@@ -8,6 +8,22 @@ static PID_t           pid_tilt;
 static float           current_pan_deg  = 0.0f;
 static float           current_tilt_deg = 0.0f;
 
+// --- FAST RGB565 TO GRAYSCALE CONVERTER ---
+static void rgb565_to_gray(uint16_t *rgb_pixels, uint8_t *gray_pixels, int num_pixels) {
+    for (int i = 0; i < num_pixels; i++) {
+        uint16_t p = rgb_pixels[i];
+        
+        // Extract RGB values and expand back to 8-bit scale
+        uint8_t r = (p >> 8) & 0xF8;
+        uint8_t g = (p >> 3) & 0xFC;
+        uint8_t b = (p << 3) & 0xF8;
+        
+        // Highly optimized integer luminance approximation: 
+        // (R*38 + G*75 + B*15) / 128
+        gray_pixels[i] = (r * 38 + g * 75 + b * 15) >> 7; 
+    }
+}
+
 static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
 
     int x_start = 0, x_end = FRAME_WIDTH;
@@ -107,20 +123,35 @@ void tracker_task(void *pv) {
 
     uint8_t *gray_prev = heap_caps_malloc(FRAME_SIZE, MALLOC_CAP_SPIRAM);
     uint8_t *gray_curr = heap_caps_malloc(FRAME_SIZE, MALLOC_CAP_SPIRAM);
+    
+    // Allocate intermediate buffer for ESP-JPEG RGB565 output (2 bytes per pixel)
+    uint8_t *rgb_buf   = heap_caps_malloc(FRAME_SIZE * 2, MALLOC_CAP_SPIRAM);
 
-    if (!gray_prev || !gray_curr) {
-        ESP_LOGE(TAG, "PSRAM alloc failed — need %u bytes x2", FRAME_SIZE);
+    if (!gray_prev || !gray_curr || !rgb_buf) {
+        ESP_LOGE(TAG, "PSRAM alloc failed");
         vTaskDelete(NULL);
         return;
     }
 
-    camera_fb_t *fb = NULL;
+    frame_buf_t fb;
 
     // ---- Seed the previous frame ----
     if (xQueueReceive(frame_queue, &fb, portMAX_DELAY)) {
-        gray_ctx_t ctx = { gray_prev, 0, FRAME_SIZE };
-        //esp_jpeg_decode(fb->buf, fb->len, JPG_SCALE_4X, _gray_out_cb, &ctx);
-        esp_camera_fb_return(fb);
+        esp_jpeg_image_cfg_t jpeg_cfg = {
+            .indata      = fb.data,
+            .indata_size = fb.len,
+            .outbuf      = rgb_buf,
+            .outbuf_size = FRAME_SIZE * 2,
+            .out_format  = JPEG_IMAGE_FORMAT_RGB565,
+            .out_scale   = JPEG_IMAGE_SCALE_1_4,
+            .flags       = { .swap_color_bytes = 0 }
+        };
+        esp_jpeg_image_output_t outimg;
+        
+        if (esp_jpeg_decode(&jpeg_cfg, &outimg) == ESP_OK) {
+            int pixels = (outimg.width * outimg.height < FRAME_SIZE) ? (outimg.width * outimg.height) : FRAME_SIZE;
+            rgb565_to_gray((uint16_t*)rgb_buf, gray_prev, pixels);
+        }
     }
 
     const float dt = TRACK_INTERVAL_MS / 1000.0f;
@@ -132,17 +163,28 @@ void tracker_task(void *pv) {
         // ---- Drain the queue; process only the freshest frame ----
         if (!xQueueReceive(frame_queue, &fb, portMAX_DELAY)) continue;
 
-        camera_fb_t *latest = fb;
+        frame_buf_t latest = fb;
 
         while (xQueueReceive(frame_queue, &fb, 0)) {
-            esp_camera_fb_return(latest);
             latest = fb;
         }
 
-        // ---- Decode at 1/4 resolution for speed ----
-        gray_ctx_t ctx = { gray_curr, 0, FRAME_SIZE };
-        //esp_jpg_decode(latest->buf, latest->len, JPG_SCALE_4X, _gray_out_cb, &ctx);
-        esp_camera_fb_return(latest);
+        // ---- Decode at 1/4 resolution and Convert to Grayscale ----
+        esp_jpeg_image_cfg_t jpeg_cfg = {
+            .indata      = latest.data,
+            .indata_size = latest.len,
+            .outbuf      = rgb_buf,
+            .outbuf_size = FRAME_SIZE * 2,
+            .out_format  = JPEG_IMAGE_FORMAT_RGB565,
+            .out_scale   = JPEG_IMAGE_SCALE_1_4,
+            .flags       = { .swap_color_bytes = 0 }
+        };
+        esp_jpeg_image_output_t outimg;
+        
+        if (esp_jpeg_decode(&jpeg_cfg, &outimg) == ESP_OK) {
+            int pixels = (outimg.width * outimg.height < FRAME_SIZE) ? (outimg.width * outimg.height) : FRAME_SIZE;
+            rgb565_to_gray((uint16_t*)rgb_buf, gray_curr, pixels);
+        }
 
         // ---- Motion detection ----
         motion_result_t motion = find_motion_centroid(gray_prev, gray_curr);
