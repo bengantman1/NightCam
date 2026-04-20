@@ -2,8 +2,9 @@
 
 // globals
 static const char* TAG = "GPIO"; // Tag for print statements
-static adc_oneshot_unit_handle_t adc_handle;  // 'static' limits scope to this file
+
 static int64_t last_pir_isr_time = 0;
+adc_oneshot_unit_handle_t adc_handle; 
 EventGroupHandle_t event_group;
 
 void IRAM_ATTR pir_isr(void* arg) {
@@ -80,22 +81,4 @@ void gpio_init_all() {
         .bitwidth = ADC_BITWIDTH_12 // 12 bit output
     };
     adc_oneshot_config_channel(adc_handle, LDR_ADC_CH, &chan_cfg); // set pin to LDR_ADC_CH
-}
-
-void ldr_read_task(void *pv) {
-    int raw;
-    while(1) {
-        // wait for PIR_ACTIVATED and clear bit on exit
-        xEventGroupWaitBits(event_group, PIR_ACTIVATED, pdTRUE, pdTRUE, portMAX_DELAY);
-        adc_oneshot_read(adc_handle, LDR_ADC_CH, &raw);
-
-        if (raw > 900) {
-            gpio_set_level(IR_ARRAY_PIN, 1);
-            ESP_LOGI(TAG, "Raw ADC Value: %d, IR array ON", raw);
-        } else {
-            gpio_set_level(IR_ARRAY_PIN, 0);
-            ESP_LOGI(TAG, "Raw ADC Value: %d, IR array OFF", raw);
-        }
-        xEventGroupSetBits(event_group, ENVIRONMENT_READY);
-    }
 }

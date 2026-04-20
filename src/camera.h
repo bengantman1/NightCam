@@ -35,11 +35,11 @@
 #define SD_CS       GPIO_NUM_21
 
 // recording config
-#define RECORD_DURATION_MS  10000
+#define RECORD_DURATION_MS  20000
 #define FRAME_INTERVAL_MS   66 // about 15 fps
 #define MOUNT_POINT         "/sdcard"
 
-#define MAX_FRAMES      150
+#define MAX_FRAMES      300
 #define FRAME_BUF_SIZE  25000 // worst case size of one frame in bytes
 
 // function declarations

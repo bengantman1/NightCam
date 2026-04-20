@@ -1,4 +1,5 @@
 #include "camera.h"
+#include "gpio.h"
 
 static const char* TAG = "CAMERA"; // Tag for print statements
 
@@ -89,6 +90,8 @@ esp_err_t camera_init() {
     sensor_t *s = esp_camera_sensor_get();
     if (s){
         s->set_framesize(s,     FRAMESIZE_QVGA);
+        s->set_vflip(s,         1);
+        s->set_hmirror(s,       1);
         s->set_quality(s,       13);
         s->set_lenc(s,          0);              // Disable lens correction (slow)
         s->set_whitebal(s,      0);              // No AWB needed for IR
@@ -154,8 +157,16 @@ void record_task(void *pv) {
     }
     int clip_index = find_next_clip_index();
     while(1) {
-        // Wait here until IR ARRAY is activated
-        xEventGroupWaitBits(event_group, ENVIRONMENT_READY, pdTRUE, pdTRUE, portMAX_DELAY);
+        // Turn on IR Array if necessary
+        int raw;
+        adc_oneshot_read(adc_handle, LDR_ADC_CH, &raw);
+        if (raw > 900) {
+            gpio_set_level(IR_ARRAY_PIN, 1);
+            ESP_LOGI(TAG, "Raw ADC Value: %d, IR array ON", raw);
+        } else {
+            gpio_set_level(IR_ARRAY_PIN, 0);
+            ESP_LOGI(TAG, "Raw ADC Value: %d, IR array OFF", raw);
+        }
         // set camera as active so PIR cannot interrupt
         xEventGroupSetBits(event_group, CAMERA_ACTIVE);
         
@@ -188,6 +199,9 @@ void record_task(void *pv) {
             TickType_t delay = pdMS_TO_TICKS(FRAME_INTERVAL_MS);
             vTaskDelay(elapsed < delay ? delay - elapsed : pdMS_TO_TICKS(5));
         }
+
+        // Turn off IR array now that camera is done recording
+        gpio_set_level(IR_ARRAY_PIN, 0);
 
         if (captured == 0) {
             ESP_LOGW(TAG, "No frames captured - skipping");
@@ -232,6 +246,7 @@ void record_task(void *pv) {
 
         clip_index++; // increment clip index by 1 afterwards
 
+        
         // Mark camera task as inactive
         xEventGroupClearBits(event_group, CAMERA_ACTIVE);
         xEventGroupSetBits(event_group, RECORDING_DONE);

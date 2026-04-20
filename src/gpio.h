@@ -19,14 +19,9 @@
 // define constants
 #define DEBOUNCE_DELAY_US 200000  // 200 ms
 
+extern adc_oneshot_unit_handle_t adc_handle;
+
 // function prototypes
 void gpio_init_all(void);
 void pir_isr(void* arg); 
 void btn_isr(void* arg);
-
-/**
- * Values range from 1300-4095
- *  <= 2400 --> bright
- * > 2700 --> dark7
- */
-void ldr_read_task(void *pv);
