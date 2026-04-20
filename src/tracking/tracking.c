@@ -3,10 +3,10 @@
 #define TAG "TRACKER"
 
 static tracker_state_t g_track        = {0};
-static PID_t           pid_pan;
-static PID_t           pid_tilt;
-static float           current_pan_deg  = 0.0f;
-static float           current_tilt_deg = 0.0f;
+static PID_t pid_pan;
+static PID_t pid_tilt;
+static float current_pan_deg  = 0.0f;
+static float current_tilt_deg = 0.0f;
 
 // --- FAST RGB565 TO GRAYSCALE CONVERTER ---
 static void rgb565_to_gray(uint16_t *rgb_pixels, uint8_t *gray_pixels, int num_pixels) {
@@ -112,8 +112,8 @@ void tracker_init(void) {
     servo_init();
 
     // Tuned for 80x60 low-res tracking
-    pid_init(&pid_pan,  0.15f, 0.002f, 0.02f, -90.0f, 90.0f);
-    pid_init(&pid_tilt, 0.15f, 0.002f, 0.02f, -90.0f, 90.0f);
+    pid_init(&pid_pan,  0.20f, 0.002f, 0.02f, -90.0f, 90.0f);
+    pid_init(&pid_tilt, 0.20f, 0.002f, 0.02f, -90.0f, 90.0f);
 
     servo_set_pan(0.0f);
     servo_set_tilt(0.0f);
@@ -135,7 +135,7 @@ void tracker_task(void *pv) {
 
     frame_buf_t fb;
 
-    // ---- Seed the previous frame ----
+    // Seed the previous frame
     if (xQueueReceive(frame_queue, &fb, portMAX_DELAY)) {
         esp_jpeg_image_cfg_t jpeg_cfg = {
             .indata      = fb.data,
@@ -164,11 +164,9 @@ void tracker_task(void *pv) {
         if (!xQueueReceive(frame_queue, &fb, portMAX_DELAY)) continue;
 
         frame_buf_t latest = fb;
-
         while (xQueueReceive(frame_queue, &fb, 0)) {
             latest = fb;
         }
-
         // ---- Decode at 1/4 resolution and Convert to Grayscale ----
         esp_jpeg_image_cfg_t jpeg_cfg = {
             .indata      = latest.data,
@@ -201,10 +199,10 @@ void tracker_task(void *pv) {
             current_tilt_deg += tilt_delta;
 
             // Hard clamp to servo limits
-            if (current_pan_deg  >  90.0f) current_pan_deg  =  90.0f;
+            if (current_pan_deg  >  90.0f) current_pan_deg  = 90.0f;
             if (current_pan_deg  < -90.0f) current_pan_deg  = -90.0f;
-            if (current_tilt_deg >  45.0f) current_tilt_deg =  45.0f;
-            if (current_tilt_deg < -45.0f) current_tilt_deg = -45.0f;
+            if (current_tilt_deg >  45.0f) current_tilt_deg =  55.0f;
+            if (current_tilt_deg < -90.0f) current_tilt_deg = -45.0f;
 
             servo_set_pan(current_pan_deg);
             servo_set_tilt(current_tilt_deg);

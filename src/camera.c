@@ -91,7 +91,7 @@ esp_err_t camera_init() {
     if (s){
         s->set_framesize(s,     FRAMESIZE_QVGA);
         s->set_vflip(s,         1);
-        s->set_hmirror(s,       1);
+        s->set_hmirror(s,       1);              // Flip horizontally and mirror vertically
         s->set_quality(s,       13);
         s->set_lenc(s,          0);              // Disable lens correction (slow)
         s->set_whitebal(s,      0);              // No AWB needed for IR
