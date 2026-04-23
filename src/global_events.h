@@ -10,7 +10,6 @@ extern QueueHandle_t frame_queue;
 
 // Define event bits
 #define PIR_ACTIVATED      BIT0
-#define ENVIRONMENT_READY  BIT1
 #define CAMERA_ACTIVE      BIT2
 #define WIFI_ACTIVE        BIT3
 #define RECORDING_DONE     BIT4

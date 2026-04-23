@@ -1,5 +1,6 @@
 #include "camera.h"
 #include "gpio.h"
+#include "tracking/servo.h"
 
 static const char* TAG = "CAMERA"; // Tag for print statements
 
@@ -157,6 +158,9 @@ void record_task(void *pv) {
     }
     int clip_index = find_next_clip_index();
     while(1) {
+        // wait until PIR sensor is activated to run record task and clear bit on exit
+        xEventGroupWaitBits(event_group, PIR_ACTIVATED, pdTRUE, pdTRUE, portMAX_DELAY);
+
         // Turn on IR Array if necessary
         int raw;
         adc_oneshot_read(adc_handle, LDR_ADC_CH, &raw);
@@ -181,8 +185,8 @@ void record_task(void *pv) {
                 ESP_LOGW(TAG, "fb_get failed - skipping frame %d", captured);
             }
 
-            size_t copy_len = frame_buffer->len < FRAME_BUF_SIZE ? frame_buffer->len : FRAME_BUF_SIZE;
-            // copy frame buffer data to frames array
+            size_t copy_len = (frame_buffer->len < FRAME_BUF_SIZE) ? frame_buffer->len : FRAME_BUF_SIZE;
+            // copy frame buffer data to frames array in PSRAM. Caps out at FRAME_BUF_SIZE
             memcpy(frames[captured].data, frame_buffer->buf, copy_len);
             frames[captured].len = copy_len;
             // send frame pointers to tracking process for servo updates
@@ -194,7 +198,7 @@ void record_task(void *pv) {
             if (captured % 10 == 0) {
                 ESP_LOGI(TAG, "  %d frames captured...", captured);
             }
-
+            // Delay to reset watchdog and maintain consistent frame rate
             TickType_t elapsed = xTaskGetTickCount() - frame_start;
             TickType_t delay = pdMS_TO_TICKS(FRAME_INTERVAL_MS);
             vTaskDelay(elapsed < delay ? delay - elapsed : pdMS_TO_TICKS(5));
@@ -202,6 +206,11 @@ void record_task(void *pv) {
 
         // Turn off IR array now that camera is done recording
         gpio_set_level(IR_ARRAY_PIN, 0);
+
+        vTaskDelay(50);
+        // center servos after recording
+        servo_set_pan(0.0f);
+        servo_set_tilt(-25.0f);
 
         if (captured == 0) {
             ESP_LOGW(TAG, "No frames captured - skipping");
@@ -212,7 +221,7 @@ void record_task(void *pv) {
 
         // create directory for clips
         char dir[48];
-        // write mount point to directory buffer. There should be a new folder each wakeup
+        // write mount point to directory buffer. There should be a new folder each motion detection
         snprintf(dir, sizeof(dir), MOUNT_POINT"/C%04d", clip_index);
 
         if (mkdir(dir, 0775) != 0) {
@@ -245,9 +254,9 @@ void record_task(void *pv) {
                  clip_index, saved, captured, dir);
 
         clip_index++; // increment clip index by 1 afterwards
-
         
-        // Mark camera task as inactive
+        
+        // Mark camera task as inactive 
         xEventGroupClearBits(event_group, CAMERA_ACTIVE);
         xEventGroupSetBits(event_group, RECORDING_DONE);
     }

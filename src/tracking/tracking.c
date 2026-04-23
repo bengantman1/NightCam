@@ -8,6 +8,16 @@ static PID_t pid_tilt;
 static float current_pan_deg  = 0.0f;
 static float current_tilt_deg = 0.0f;
 
+static inline uint8_t clamp_u8(int v) {
+    return (v < 0) ? 0 : (v > 255 ? 255 : v);
+}
+
+static uint8_t compute_mean(uint8_t *img) {
+    uint32_t sum = 0;
+    for (int i = 0; i < FRAME_SIZE; i++) sum += img[i];
+    return (uint8_t)(sum / FRAME_SIZE);
+}
+
 // --- FAST RGB565 TO GRAYSCALE CONVERTER ---
 static void rgb565_to_gray(uint16_t *rgb_pixels, uint8_t *gray_pixels, int num_pixels) {
     for (int i = 0; i < num_pixels; i++) {
@@ -29,59 +39,90 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
     int x_start = 0, x_end = FRAME_WIDTH;
     int y_start = 0, y_end = FRAME_HEIGHT;
 
-    // Narrow the search window once we have a lock
     if (g_track.has_lock) {
         x_start = g_track.last_x - ROI_RADIUS;
         x_end   = g_track.last_x + ROI_RADIUS;
         y_start = g_track.last_y - ROI_RADIUS;
         y_end   = g_track.last_y + ROI_RADIUS;
 
-        if (x_start < 0)            x_start = 0;
-        if (y_start < 0)            y_start = 0;
-        if (x_end   > FRAME_WIDTH)  x_end   = FRAME_WIDTH;
-        if (y_end   > FRAME_HEIGHT) y_end   = FRAME_HEIGHT;
+        if (x_start < 0) x_start = 0;
+        if (y_start < 0) y_start = 0;
+        if (x_end > FRAME_WIDTH) x_end = FRAME_WIDTH;
+        if (y_end > FRAME_HEIGHT) y_end = FRAME_HEIGHT;
     }
 
-    int mass  = 0;
+    // --- KEY FIX: illumination normalization ---
+    uint8_t mean_prev = compute_mean(prev);
+    uint8_t mean_curr = compute_mean(curr);
+
+    int mass = 0;
     int sum_x = 0;
     int sum_y = 0;
 
     for (int y = y_start; y < y_end; y += BLOCK) {
         for (int x = x_start; x < x_end; x += BLOCK) {
 
-            // ---- Sparse sample: cheap reject for quiet blocks ----
+            int block_mass = 0;
             int block_diff = 0;
 
             for (int by = 0; by < BLOCK; by += SAMPLE_STEP) {
                 int yy = y + by;
                 if (yy >= y_end) break;
 
-                int row = yy * FRAME_WIDTH + x;
+                int row = yy * FRAME_WIDTH;
 
                 for (int bx = 0; bx < BLOCK; bx += SAMPLE_STEP) {
                     int xx = x + bx;
                     if (xx >= x_end) break;
 
-                    block_diff += abs(prev[row + bx] - curr[row + bx]);
+                    int idx = row + xx;
+
+                    uint8_t p0 = prev[idx];
+                    uint8_t p1 = curr[idx];
+
+                    // --- KEY FIX: reject saturated pixels (bright lights) ---
+                    if (p0 > 200 || p1 > 200) continue;
+
+                    // --- KEY FIX: normalize illumination ---
+                    int d0 = (int)p0 - mean_prev;
+                    int d1 = (int)p1 - mean_curr;
+
+                    int d = abs(d1 - d0);
+
+                    block_diff += d;
                 }
             }
 
             if (block_diff < BLOCK_THRESHOLD) continue;
 
-            // ---- Full scan: only active blocks reach here ----
             for (int by = 0; by < BLOCK; by++) {
                 int yy = y + by;
                 if (yy >= y_end) break;
 
-                int row = yy * FRAME_WIDTH + x;
+                int row = yy * FRAME_WIDTH;
 
                 for (int bx = 0; bx < BLOCK; bx++) {
                     int xx = x + bx;
                     if (xx >= x_end) break;
 
-                    int d = abs(prev[row + bx] - curr[row + bx]);
+                    int idx = row + xx;
+
+                    uint8_t p0 = prev[idx];
+                    uint8_t p1 = curr[idx];
+
+                    // ignore saturated pixels again (important)
+                    if (p0 > 240 || p1 > 240) continue;
+
+                    int d0 = (int)p0 - mean_prev;
+                    int d1 = (int)p1 - mean_curr;
+
+                    int d = abs(d1 - d0);
 
                     if (d > TRACK_THRESHOLD) {
+
+                        block_mass++;
+                        if (block_mass > 50) break; // prevents light domination
+
                         mass++;
                         sum_x += xx;
                         sum_y += yy;
@@ -93,15 +134,17 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
 
     motion_result_t res = {0};
 
-    if (mass > TRACK_MIN_MASS) {
-        res.valid        = true;
-        res.x            = sum_x / mass;
-        res.y            = sum_y / mass;
-        g_track.last_x   = res.x;
-        g_track.last_y   = res.y;
+    // --- KEY FIX: reject "global flash" events ---
+    if (mass > TRACK_MIN_MASS && mass < FRAME_SIZE * 0.2f) {
+        res.valid = true;
+        res.x = sum_x / mass;
+        res.y = sum_y / mass;
+
+        g_track.last_x = res.x;
+        g_track.last_y = res.y;
         g_track.has_lock = true;
     } else {
-        res.valid        = false;
+        res.valid = false;
         g_track.has_lock = false;
     }
 
@@ -112,11 +155,11 @@ void tracker_init(void) {
     servo_init();
 
     // Tuned for 80x60 low-res tracking
-    pid_init(&pid_pan,  0.20f, 0.002f, 0.02f, -90.0f, 90.0f);
-    pid_init(&pid_tilt, 0.20f, 0.002f, 0.02f, -90.0f, 90.0f);
+    pid_init(&pid_pan,  0.30f, 0.002f, 0.02f, -90.0f, 90.0f);
+    pid_init(&pid_tilt, 0.30f, 0.002f, 0.02f, -90.0f, 90.0f);
 
     servo_set_pan(0.0f);
-    servo_set_tilt(0.0f);
+    servo_set_tilt(-25.0f);
 }
 
 void tracker_task(void *pv) {
@@ -201,8 +244,8 @@ void tracker_task(void *pv) {
             // Hard clamp to servo limits
             if (current_pan_deg  >  90.0f) current_pan_deg  = 90.0f;
             if (current_pan_deg  < -90.0f) current_pan_deg  = -90.0f;
-            if (current_tilt_deg >  45.0f) current_tilt_deg =  55.0f;
-            if (current_tilt_deg < -90.0f) current_tilt_deg = -45.0f;
+            if (current_tilt_deg >  -25.0f) current_tilt_deg =  -25.0f;
+            if (current_tilt_deg < -80.0f) current_tilt_deg = -80.0f;
 
             servo_set_pan(current_pan_deg);
             servo_set_tilt(current_tilt_deg);
@@ -223,6 +266,8 @@ void tracker_task(void *pv) {
 
         if (elapsed < budget) {
             vTaskDelay(budget - elapsed);
+        } else {
+            vTaskDelay(5);
         }
     }
 }
