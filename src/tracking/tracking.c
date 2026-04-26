@@ -2,23 +2,26 @@
 
 #define TAG "TRACKER"
 
-static tracker_state_t g_track        = {0};
+// globals
+static tracker_state_t g_track = {0};
 static PID_t pid_pan;
 static PID_t pid_tilt;
-static float current_pan_deg  = 0.0f;
+static float current_pan_deg = 0.0f;
 static float current_tilt_deg = 0.0f;
 
+// 8 bit clamping
 static inline uint8_t clamp_u8(int v) {
     return (v < 0) ? 0 : (v > 255 ? 255 : v);
 }
 
+// Get average pixel value in image
 static uint8_t compute_mean(uint8_t *img) {
     uint32_t sum = 0;
     for (int i = 0; i < FRAME_SIZE; i++) sum += img[i];
     return (uint8_t)(sum / FRAME_SIZE);
 }
 
-// --- FAST RGB565 TO GRAYSCALE CONVERTER ---
+// RGB565 to grayscale converter
 static void rgb565_to_gray(uint16_t *rgb_pixels, uint8_t *gray_pixels, int num_pixels) {
     for (int i = 0; i < num_pixels; i++) {
         uint16_t p = rgb_pixels[i];
@@ -28,7 +31,7 @@ static void rgb565_to_gray(uint16_t *rgb_pixels, uint8_t *gray_pixels, int num_p
         uint8_t g = (p >> 3) & 0xFC;
         uint8_t b = (p << 3) & 0xF8;
         
-        // Highly optimized integer luminance approximation: 
+        // Integer luminance approximation: 
         // (R*38 + G*75 + B*15) / 128
         gray_pixels[i] = (r * 38 + g * 75 + b * 15) >> 7; 
     }
@@ -39,6 +42,9 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
     int x_start = 0, x_end = FRAME_WIDTH;
     int y_start = 0, y_end = FRAME_HEIGHT;
 
+
+    // If previously locked on an area, scan surrounding region only
+    // Otherwise, scan entire frame
     if (g_track.has_lock) {
         x_start = g_track.last_x - ROI_RADIUS;
         x_end   = g_track.last_x + ROI_RADIUS;
@@ -51,7 +57,7 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
         if (y_end > FRAME_HEIGHT) y_end = FRAME_HEIGHT;
     }
 
-    // --- KEY FIX: illumination normalization ---
+    // illumination normalization
     uint8_t mean_prev = compute_mean(prev);
     uint8_t mean_curr = compute_mean(curr);
 
@@ -65,10 +71,12 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
             int block_mass = 0;
             int block_diff = 0;
 
+            // Loop twice within each block
             for (int by = 0; by < BLOCK; by += SAMPLE_STEP) {
                 int yy = y + by;
                 if (yy >= y_end) break;
 
+                // Unroll 2D array to find index
                 int row = yy * FRAME_WIDTH;
 
                 for (int bx = 0; bx < BLOCK; bx += SAMPLE_STEP) {
@@ -80,10 +88,10 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
                     uint8_t p0 = prev[idx];
                     uint8_t p1 = curr[idx];
 
-                    // --- KEY FIX: reject saturated pixels (bright lights) ---
+                    // Reject saturated pixels (bright lights)
                     if (p0 > 200 || p1 > 200) continue;
 
-                    // --- KEY FIX: normalize illumination ---
+                    // Normalize illumination
                     int d0 = (int)p0 - mean_prev;
                     int d1 = (int)p1 - mean_curr;
 
@@ -110,8 +118,8 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
                     uint8_t p0 = prev[idx];
                     uint8_t p1 = curr[idx];
 
-                    // ignore saturated pixels again (important)
-                    if (p0 > 240 || p1 > 240) continue;
+                    // ignore saturated pixels again
+                    if (p0 > 200 || p1 > 200) continue;
 
                     int d0 = (int)p0 - mean_prev;
                     int d1 = (int)p1 - mean_curr;
@@ -134,7 +142,7 @@ static motion_result_t find_motion_centroid(uint8_t *prev, uint8_t *curr) {
 
     motion_result_t res = {0};
 
-    // --- KEY FIX: reject "global flash" events ---
+    // reject global flash events
     if (mass > TRACK_MIN_MASS && mass < FRAME_SIZE * 0.2f) {
         res.valid = true;
         res.x = sum_x / mass;
@@ -168,7 +176,7 @@ void tracker_task(void *pv) {
     uint8_t *gray_curr = heap_caps_malloc(FRAME_SIZE, MALLOC_CAP_SPIRAM);
     
     // Allocate intermediate buffer for ESP-JPEG RGB565 output (2 bytes per pixel)
-    uint8_t *rgb_buf   = heap_caps_malloc(FRAME_SIZE * 2, MALLOC_CAP_SPIRAM);
+    uint8_t *rgb_buf = heap_caps_malloc(FRAME_SIZE * 2, MALLOC_CAP_SPIRAM);
 
     if (!gray_prev || !gray_curr || !rgb_buf) {
         ESP_LOGE(TAG, "PSRAM alloc failed");
@@ -178,7 +186,7 @@ void tracker_task(void *pv) {
 
     frame_buf_t fb;
 
-    // Seed the previous frame
+    // Decompress JPEG into buffer holding individual pixels to enable tracking
     if (xQueueReceive(frame_queue, &fb, portMAX_DELAY)) {
         esp_jpeg_image_cfg_t jpeg_cfg = {
             .indata      = fb.data,
@@ -203,14 +211,14 @@ void tracker_task(void *pv) {
 
         TickType_t t_start = xTaskGetTickCount();
 
-        // ---- Drain the queue; process only the freshest frame ----
+        // Drain the queue and process only the newest frame
         if (!xQueueReceive(frame_queue, &fb, portMAX_DELAY)) continue;
 
         frame_buf_t latest = fb;
         while (xQueueReceive(frame_queue, &fb, 0)) {
             latest = fb;
         }
-        // ---- Decode at 1/4 resolution and Convert to Grayscale ----
+        // Decode at 1/4 resolution and convert to grayscale
         esp_jpeg_image_cfg_t jpeg_cfg = {
             .indata      = latest.data,
             .indata_size = latest.len,
@@ -227,7 +235,7 @@ void tracker_task(void *pv) {
             rgb565_to_gray((uint16_t*)rgb_buf, gray_curr, pixels);
         }
 
-        // ---- Motion detection ----
+        // Motion detection
         motion_result_t motion = find_motion_centroid(gray_prev, gray_curr);
 
         if (motion.valid) {
@@ -236,7 +244,7 @@ void tracker_task(void *pv) {
             float ey = (float)(motion.y - FRAME_CENTER_Y);
 
             float pan_delta  =  pid_update(&pid_pan,  ex, dt);
-            float tilt_delta = -pid_update(&pid_tilt, ey, dt);   // Y-axis inverted
+            float tilt_delta = -pid_update(&pid_tilt, ey, dt); // Y-axis inverted
 
             current_pan_deg  += pan_delta;
             current_tilt_deg += tilt_delta;
@@ -247,20 +255,19 @@ void tracker_task(void *pv) {
             if (current_tilt_deg >  -25.0f) current_tilt_deg =  -25.0f;
             if (current_tilt_deg < -80.0f) current_tilt_deg = -80.0f;
 
+            // update servos
             servo_set_pan(current_pan_deg);
             servo_set_tilt(current_tilt_deg);
 
-            ESP_LOGI(TAG, "Track (%d,%d) → pan=%.1f tilt=%.1f",
-                     motion.x, motion.y,
-                     current_pan_deg, current_tilt_deg);
+            ESP_LOGI(TAG, "Track (%d,%d) --> pan=%.1f tilt=%.1f", motion.x, motion.y, current_pan_deg, current_tilt_deg);
         }
 
-        // ---- Swap buffers (no copy — just pointer swap) ----
+        // Swap buffer pointers (gray_curr will be overwritten)
         uint8_t *tmp = gray_prev;
         gray_prev    = gray_curr;
         gray_curr    = tmp;
 
-        // ---- Rate control: yield remaining slice to scheduler ----
+        // Yield remaining slice to scheduler
         TickType_t elapsed = xTaskGetTickCount() - t_start;
         TickType_t budget  = pdMS_TO_TICKS(TRACK_INTERVAL_MS);
 

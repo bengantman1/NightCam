@@ -9,13 +9,11 @@ extern EventGroupHandle_t event_group;
 extern QueueHandle_t frame_queue;
 
 // Define event bits
-#define PIR_ACTIVATED      BIT0
-#define CAMERA_ACTIVE      BIT2
-#define WIFI_ACTIVE        BIT3
-#define RECORDING_DONE     BIT4
+#define CAMERA_ACTIVE            BIT0
+#define WIFI_ACTIVE              BIT1
 #define WIFI_CLIENT_DISCONNECTED BIT5
 
-// define global types
+// Frame buffer type needed by record task (producer) and tracking task (consumer) 
 typedef struct {
     uint8_t *data; // pointer to pixel array
     size_t   len; // num of bytes in the array

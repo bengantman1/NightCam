@@ -30,12 +30,7 @@
 // Region of interest window (pixels) when locked on a target
 #define ROI_RADIUS         32
 
-// FreeRTOS task config — pin to core 1 (PRO_CPU) away from WiFi/BT
-#define TRACKER_TASK_STACK   4096
-#define TRACKER_TASK_PRIO    5
-#define TRACKER_TASK_CORE    1     // PRO_CPU_NUM
-
-// JPEG → grayscale decode callback (provided by your camera module)
+// JPEG to grayscale decode callback (provided by  camera module)
 typedef struct {
     uint8_t *buf;
     size_t   index;

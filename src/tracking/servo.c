@@ -2,6 +2,7 @@
 
 static uint32_t us_to_duty(uint32_t us) {
     // period = 1,000,000 / 50Hz = 20,000 us
+    // duty cycle percentage = us / 20,000 
     return (uint32_t)((uint64_t)LEDC_MAX_DUTY * us / 20000);
 }
 
@@ -28,7 +29,7 @@ static void ledc_setup(ledc_timer_t timer, ledc_channel_t channel, int gpio) {
 }
 
 void servo_init(void) {
-    ledc_setup(PAN_TIMER,  PAN_CHANNEL,  SERVO_PAN_PIN);
+    ledc_setup(PAN_TIMER, PAN_CHANNEL, SERVO_PAN_PIN);
     ledc_setup(TILT_TIMER, TILT_CHANNEL, SERVO_TILT_PIN);
 }
 
@@ -39,10 +40,11 @@ static void servo_write_us(ledc_channel_t ch, uint32_t us) {
 }
 
 static uint32_t deg_to_us(float deg) {
-    // Map -90..+90 → 1000..2000 µs
+    // Map (-90, +90) to (1000, 2000 us)
     float clamped = deg < -90.0f ? -90.0f : (deg > 90.0f ? 90.0f : deg);
+    // Normalize clamped degree, multiply by range of us, and add to middle period value
     return (uint32_t)(SERVO_MID_US + (clamped / 90.0f) * ((SERVO_MAX_US - SERVO_MIN_US) / 2.0f));
 }
 
-void servo_set_pan(float deg)  { servo_write_us(PAN_CHANNEL,  deg_to_us(deg)); }
+void servo_set_pan(float deg) { servo_write_us(PAN_CHANNEL, deg_to_us(deg)); }
 void servo_set_tilt(float deg) { servo_write_us(TILT_CHANNEL, deg_to_us(deg)); }

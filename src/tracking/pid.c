@@ -1,7 +1,6 @@
 #include "pid.h"
 
-void pid_init(PID_t *pid, float kp, float ki, float kd,
-              float out_min, float out_max) {
+void pid_init(PID_t *pid, float kp, float ki, float kd, float out_min, float out_max) {
     pid->kp = kp; pid->ki = ki; pid->kd = kd;
     pid->integral   = 0;
     pid->prev_error = 0;
@@ -14,9 +13,7 @@ float pid_update(PID_t *pid, float error, float dt) {
     float derivative = (error - pid->prev_error) / dt;
     pid->prev_error  = error;
 
-    float out = pid->kp * error
-              + pid->ki * pid->integral
-              + pid->kd * derivative;
+    float out = (pid->kp * error) + (pid->ki * pid->integral) + (pid->kd * derivative);
 
     // clamp
     if (out > pid->output_max) out = pid->output_max;

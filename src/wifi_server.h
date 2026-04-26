@@ -19,32 +19,21 @@
 #include "esp_system.h"
 #include "global_events.h"
 
-#include "camera.h"   // for event_group, CAMERA_ACTIVE, RECORDING_DONE, MOUNT_POINT
+#include "camera.h"   // for event_group, CAMERA_ACTIVE, MOUNT_POINT
 
-// ---------------------------------------------------------------------------
-// AP configuration — change as needed
-// ---------------------------------------------------------------------------
-#define AP_SSID         "NightCam-AP"
-#define AP_PASSWORD     "nightcam1234"   // min 8 chars; set to "" for open network
-#define AP_CHANNEL      1
-#define AP_MAX_CONN     2                // max simultaneous stations
+// AP Config
+#define AP_SSID "NightCam-AP"
+#define AP_PASSWORD "nightcam1234" // min 8 chars; set to "" for open network
+#define AP_CHANNEL 1
+#define AP_MAX_CONN 2 // max simultaneous stations
 
-// ---------------------------------------------------------------------------
 // Server tuning
-// ---------------------------------------------------------------------------
-#define SERVER_PORT             80
-#define FILE_CHUNK_SIZE         (8 * 1024)   // bytes sent per HTTP chunk
-#define MAX_URI_LEN             256
-
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+#define SERVER_PORT     80
+#define FILE_CHUNK_SIZE (8 * 1024) // bytes sent per HTTP chunk
+#define MAX_URI_LEN     256
 
 /**
- * @brief  FreeRTOS task: starts the WiFi AP and HTTP server whenever the
- *         camera is idle, shuts them down while recording is in progress,
- *         then restarts once RECORDING_DONE is signalled.
- *
- * Stack recommendation: 8192 bytes, priority 3 (below record_task).
+ * @brief FreeRTOS task: starts the WiFi AP and HTTP server whenever the
+ * camera is idle and button is pressed
  */
 void wifi_server_task(void *pv);

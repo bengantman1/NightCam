@@ -4,10 +4,12 @@
 
 static const char* TAG = "CAMERA"; // Tag for print statements
 
+// Stores frames allocated in PSRAM
 static frame_buf_t frames[MAX_FRAMES];
-static bool        psram_ready = false;
+static bool psram_ready = false;
 static sdmmc_card_t *sd_card = NULL;
 
+// For communication with tracking task
 QueueHandle_t frame_queue;
 
 esp_err_t sd_init(void) {
@@ -51,6 +53,7 @@ esp_err_t sd_init(void) {
 }
 
 esp_err_t camera_init() {
+    // set pins, timer for camera clock, JPEG compression, and frame buffer
     camera_config_t config = {
         .pin_pwdn     = PWDN_GPIO_NUM,
         .pin_reset    = RESET_GPIO_NUM,
@@ -69,16 +72,16 @@ esp_err_t camera_init() {
         .pin_href     = HREF_GPIO_NUM,
         .pin_pclk     = PCLK_GPIO_NUM,
 
-        .xclk_freq_hz = 20000000,           // 20MHz - stable on OV3660
+        .xclk_freq_hz = 20000000, // 20MHz - stable on OV3660
 
         .ledc_timer   = LEDC_TIMER_2,
         .ledc_channel = LEDC_CHANNEL_2,
         .pixel_format = PIXFORMAT_JPEG,
-        .frame_size   = FRAMESIZE_QVGA,    // 320 x 240
+        .frame_size   = FRAMESIZE_QVGA, // 320 x 240 pixels
         .jpeg_quality = 13,
-
+        
         .fb_count    = 2,                   
-        .fb_location = CAMERA_FB_IN_DRAM,   // DRAM not PSRAM - DMA accessible
+        .fb_location = CAMERA_FB_IN_DRAM, // DRAM not PSRAM for frame buffer - DMA accessible
         .grab_mode   = CAMERA_GRAB_LATEST
     };
 
@@ -87,43 +90,45 @@ esp_err_t camera_init() {
         ESP_LOGE(TAG, "Camera init failed: 0x%x", err);
         return err;
     }
-//vary some of these dependent on Light sensor reading
+    // configure additional parameters
     sensor_t *s = esp_camera_sensor_get();
     if (s){
         s->set_framesize(s,     FRAMESIZE_QVGA);
         s->set_vflip(s,         1);
-        s->set_hmirror(s,       1);              // Flip horizontally and mirror vertically
+        s->set_hmirror(s,       1);              // Flip image horizontally and mirror vertically
         s->set_quality(s,       13);
         s->set_lenc(s,          0);              // Disable lens correction (slow)
-        s->set_whitebal(s,      0);              // No AWB needed for IR
+        s->set_whitebal(s,      0);              // No white balancing needed for IR
         s->set_exposure_ctrl(s, 0);              // Fixed exposure for IR lighting
-        s->set_aec_value(s,     400);            // Tune for your IR LED strength (0-1200)
-        s->set_gain_ctrl(s,     1);              // Auto gain on (do we want this off for better speed/less computation?)
-        s->set_gainceiling(s,   GAINCEILING_8X); // High gain for night vision
+        s->set_aec_value(s,     400);           
+        s->set_gain_ctrl(s,     1);              // Auto gain on
+        s->set_gainceiling(s,   GAINCEILING_8X); // High gain ceiling for night vision
     }
 
-    ESP_LOGI(TAG, "Camera ready (OV3660 IR FPV, DRAM, ~33fps)");
+    ESP_LOGI(TAG, "Camera ready (OV3660 IR FPV, DRAM, ~15fps)");
 
+    // Allocate pseudo-static ram for frame storage
     psram_ready = psram_alloc_frames();
      if (!psram_ready) {
         ESP_LOGE(TAG, "PSRAM alloc failed");
         return err;
     }
 
+    // initialize frame queue
     frame_queue = xQueueCreate(10, sizeof(frame_buf_t));
 
     return ESP_OK;
 }
 
 bool psram_alloc_frames(void) {
-    // allocate space in pseudo static RAM for heavy work
+    // allocate space in pseudo static RAM for larger storage capacity
     for (int i = 0; i < MAX_FRAMES; i++) {
         // Allocate to PSRAM
         frames[i].data = heap_caps_malloc(FRAME_BUF_SIZE, MALLOC_CAP_SPIRAM);
         frames[i].len  = 0;
         if (!frames[i].data) {
             ESP_LOGE(TAG, "PSRAM alloc failed at slot %d", i);
-            // free all allocated frames and exit
+            // free all allocated frames and exit if failure
             for (int j = 0; j < i; j++) {
                 heap_caps_free(frames[j].data);
                 frames[j].data = NULL;
@@ -131,9 +136,9 @@ bool psram_alloc_frames(void) {
             return false;
         }
     }
-    ESP_LOGI(TAG, "PSRAM ready — %d slots x %d bytes = %.1f MB",
+    ESP_LOGI(TAG, "PSRAM ready - %d slots x %d bytes = %.1f MB",
              MAX_FRAMES, FRAME_BUF_SIZE,
-             (float)MAX_FRAMES * FRAME_BUF_SIZE / (1024.0f * 1024.0f));
+             (float)MAX_FRAMES * FRAME_BUF_SIZE / (1024.0f * 1024.0f)); // convert to MB
     return true;
 }
 
@@ -141,6 +146,7 @@ static int find_next_clip_index(void) {
     int i = 0;
     struct stat st;
     char path[48];
+    // Search through all clips stored on SD card until an opening is found
     while (i < 9999) {
         snprintf(path, sizeof(path), MOUNT_POINT "/C%04d", i);
         // if the path doesn't exist, index i is available
@@ -156,27 +162,28 @@ void record_task(void *pv) {
         ESP_LOGE(TAG, "PSRAM not ready - aborting");
         vTaskDelete(NULL); // delete this task since PSRAM not ready
     }
+    // find open clip slot and increment by 1 afterwards
     int clip_index = find_next_clip_index();
     while(1) {
-        // wait until PIR sensor is activated to run record task and clear bit on exit
-        xEventGroupWaitBits(event_group, PIR_ACTIVATED, pdTRUE, pdTRUE, portMAX_DELAY);
+        // Wait until PIR sensor is activated to run record task and don't clear bit on exit
+        // Keep camera as active so PIR/WIFI cannot interrupt
+        xEventGroupWaitBits(event_group, CAMERA_ACTIVE, pdFALSE, pdTRUE, portMAX_DELAY);
 
         // Turn on IR Array if necessary
         int raw;
         adc_oneshot_read(adc_handle, LDR_ADC_CH, &raw);
-        if (raw > 900) {
+        if (raw > IR_THRESHOLD) {
             gpio_set_level(IR_ARRAY_PIN, 1);
             ESP_LOGI(TAG, "Raw ADC Value: %d, IR array ON", raw);
         } else {
             gpio_set_level(IR_ARRAY_PIN, 0);
             ESP_LOGI(TAG, "Raw ADC Value: %d, IR array OFF", raw);
         }
-        // set camera as active so PIR cannot interrupt
-        xEventGroupSetBits(event_group, CAMERA_ACTIVE);
-        
+
         int captured = 0;
         TickType_t end = xTaskGetTickCount() + pdMS_TO_TICKS(RECORD_DURATION_MS);
 
+        // record until maximum duration or maximum num frames is captured
         while (xTaskGetTickCount() < end && captured < MAX_FRAMES) {
             TickType_t frame_start = xTaskGetTickCount();
 
@@ -207,8 +214,8 @@ void record_task(void *pv) {
         // Turn off IR array now that camera is done recording
         gpio_set_level(IR_ARRAY_PIN, 0);
 
-        vTaskDelay(50);
         // center servos after recording
+        vTaskDelay(50);
         servo_set_pan(0.0f);
         servo_set_tilt(-25.0f);
 
@@ -217,7 +224,7 @@ void record_task(void *pv) {
             continue;
         }
         
-        ESP_LOGI(TAG, "Captured %d frames — writing to SD", captured);
+        ESP_LOGI(TAG, "Captured %d frames. Writing to SD", captured);
 
         // create directory for clips
         char dir[48];
@@ -225,7 +232,7 @@ void record_task(void *pv) {
         snprintf(dir, sizeof(dir), MOUNT_POINT"/C%04d", clip_index);
 
         if (mkdir(dir, 0775) != 0) {
-            ESP_LOGE(TAG, "mkdir failed: %s - errno: %d (%s)", dir, errno, strerror(errno));
+            ESP_LOGE(TAG, "mkdir failed: %s. errno: %d (%s)", dir, errno, strerror(errno));
         } else {
             ESP_LOGI(TAG, "Created directory: %s", dir);
         }
@@ -250,15 +257,11 @@ void record_task(void *pv) {
             }
         }
 
-        ESP_LOGI(TAG, ">>> Clip %d done - %d/%d frames saved to %s",
-                 clip_index, saved, captured, dir);
+        ESP_LOGI(TAG, ">>> Clip %d done. %d/%d frames saved to %s", clip_index, saved, captured, dir);
 
-        clip_index++; // increment clip index by 1 afterwards
+        clip_index++;
         
-        
-        // Mark camera task as inactive 
+        // Mark camera task as inactive, allowing for WIFI or another motion detection
         xEventGroupClearBits(event_group, CAMERA_ACTIVE);
-        xEventGroupSetBits(event_group, RECORDING_DONE);
     }
-
 }

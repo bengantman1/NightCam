@@ -11,17 +11,25 @@
 #include "esp_sleep.h"
 
 // define pins
-#define PIR_PIN GPIO_NUM_4
-#define BUTTON_PIN GPIO_NUM_5
+#define PIR_PIN      GPIO_NUM_4
+#define BUTTON_PIN   GPIO_NUM_5
 #define IR_ARRAY_PIN GPIO_NUM_6
-#define LDR_ADC_CH ADC_CHANNEL_1 // pin 1 for LDR
+#define LDR_ADC_CH   ADC_CHANNEL_1 // pin 1 for LDR
 
 // define constants
 #define DEBOUNCE_DELAY_US 200000  // 200 ms
 
 extern adc_oneshot_unit_handle_t adc_handle;
 
-// function prototypes
+/**
+ * @brief Initialize ISRs, IR array digital out, and ADC for light-dependent-resistor reading
+ */
 void gpio_init_all(void);
+/**
+ * @brief Activate ISR when motion detected and notify recording task to begin capture using event group
+ */
 void pir_isr(void* arg); 
+/**
+ * @brief Activate on button press and notify wifi task to start access point
+ */
 void btn_isr(void* arg);
