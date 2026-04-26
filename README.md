@@ -40,8 +40,9 @@ This project sits between commercial trail cameras and networked security camera
 
 ## <ins>Improvements</ins> <br>
 
-Tweaking image quality and resolution to find the best balance without sacrificing tracking performance would be a priority. The tracking algorithm itself could be improved, as it currently favors areas of high luminosity rather than strictly detecting movement. A faster JPEG decoder library, which we could not get working in time, would reduce decoding overhead and enable a higher tracking frame rate. A more significant design pivot would be offloading tracking to an external computer via video streaming, using ML-based object detection, which would remove the on-device processing bottleneck, allow higher resolution capture, and reduce sensitivity to environmental noise. <br>
+Investigating sleep/wake-up issues to improve overall power consumptionwould be a priority. Tweaking image quality and resolution to find the best balance without sacrificing tracking performance. The tracking algorithm itself could be improved, as it currently favors areas of high luminosity rather than strictly detecting movement. A faster JPEG decoder library, which we could not get working in time, would reduce decoding overhead and enable a higher tracking frame rate. A more significant design pivot would be offloading tracking to an external computer via video streaming, using ML-based object detection, which would remove the on-device processing bottleneck, allow higher resolution capture, and reduce sensitivity to environmental noise. <br>
 
 ## <ins>Circuit Diagram</ins> <br>
 
 ![Circuit Diagram](https://github.gatech.edu/user-attachments/assets/323d38a6-af50-4f7d-9e3c-a495e0a0e3a7)
+
