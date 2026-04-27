@@ -1,4 +1,4 @@
-ECE 4180 - Final Project
+# ECE 4180 - Final Project
 
 Aidan Abrams, Benjamin Gantman
 
@@ -45,4 +45,5 @@ Investigating sleep/wake-up issues to improve overall power consumptionwould be 
 ## <ins>Circuit Diagram</ins> <br>
 
 ![Circuit Diagram](https://github.gatech.edu/user-attachments/assets/323d38a6-af50-4f7d-9e3c-a495e0a0e3a7)
+
 
