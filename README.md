@@ -1,4 +1,4 @@
-# ECE 4180 - Final Project
+# NightCam ESP32 Based Trail Camera
 
 Aidan Abrams, Benjamin Gantman
 
